@@ -1,18 +1,34 @@
-# The Driving Center OS (BOS)
-An autonomous, event-driven Business Operating System designed to automate logistics, compliance, and payments for a driving school.
+# 🚘 The Driving Center: AntiGravity OS
 
-## 🏗️ System Architecture
-* **Orchestration:** n8n (Self-hosted workflows for webhook handling & logic).
-* **Cognitive Layer:** Google Gemini (LLM) for parsing unstructured email data into structured JSON.
-* **Database:** Supabase (PostgreSQL) with strict Row-Level Security (RLS).
-* **Frontend:** Next.js 14 (React) + Tailwind CSS.
+**An Autonomous Business Operating System (BOS) built on the MAPS Framework.**
 
-## 🔐 Zero-Trust Security Model
-* **Identity Isolation:** Root business accounts are isolated via a Proton Mail bridge to prevent identity bleed.
-* **Hardware Auth:** Access to production environment is secured via YubiKey 5 NFC (FIDO2).
-* **Compliance:** Schema designed for T.C.A. 1340-03-07 data retention standards.
+## 📡 System Overview
+This is not a static website. It is an **Agentic System** that orchestrates the logistics of a driving academy. It utilizes an event-driven architecture to decouple the "Frontend" (Next.js) from the "Business Logic" (n8n/Gemini).
 
-## ⚡ Core Workflows
-1.  **Lead Injection:** Gmail Watch -> Gemini Extraction -> Supabase Insert.
-2.  **Payment Verification:** Stripe Webhook -> Signature Check -> Student Status Update.
-3.  **Dynamic Scheduling:** Real-time slot availability matching (Anti-Collision logic).
+## 🗺️ The MAPS Architecture
+This project follows the **AntiGravity** architectural standard:
+
+### 🧬 M - Mission (Context)
+* **Goal:** Zero-Admin operations for a high-throughput service business.
+* **Identity Isolation:** Dev/Prod environments separated via **Proton** bridge and **YubiKey** hardware authentication.
+
+### ⚡ A - Actions (Agents)
+* **Orchestrator:** **n8n** (Self-Hosted).
+* **Cognitive Layer:** **Google Gemini 1.5 Pro** via Vertex AI.
+* **Function:** Parses unstructured inputs (emails, forms) into structured SQL transactions.
+
+### 📚 P - Past (Memory)
+* **Data Sovereignty:** Strict adherence to **T.C.A. 1340-03-07** for record retention.
+* **Context:** Notion acting as the "Long Term Memory" (LTM) via **Model Context Protocol (MCP)**.
+
+### 📊 S - Stats (Truth)
+* **The Vault:** **Supabase** (PostgreSQL) with Row-Level Security (RLS).
+* **Verification:** Stripe Webhooks with cryptographic signature checks.
+
+## 🛠️ Tech Stack
+* **Frontend:** Next.js 14, Tailwind, Lucide
+* **Backend:** Supabase, Edge Functions
+* **AI/Logic:** n8n, Gemini, MCP
+
+## 🚀 Deployment
+Deployed via Vercel with strict environment variable encryption. Zero hardcoded secrets.
