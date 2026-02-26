@@ -1,0 +1,31 @@
+name: BOS Continuous Integration
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    name: Type Check & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Vault
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies (Strict)
+        run: npm ci
+
+      - name: Execute Next.js Build
+        run: npm run build
+        env:
+          # We pass dummy vars so the build doesn't crash on missing envs
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder-url-for-build.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key-for-build"
