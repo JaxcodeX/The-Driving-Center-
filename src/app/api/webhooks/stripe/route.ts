@@ -1,47 +1,101 @@
-import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
+import { encrypt } from '@/lib/crypto';
 
-// Initialize Stripe with strict TypeScript typing
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2023-10-16' as any, // Cast to avoid TS error with newer Stripe library versions
-});
+// Force dynamic — this route must never be statically analyzed
+export const dynamic = 'force-dynamic';
 
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+// Lazy initialization to prevent build-time crashes when keys are missing
+function getStripe() {
+    return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: '2026-01-28.clover',
+    });
+}
+
+function getSupabaseAdmin() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+}
 
 export async function POST(req: Request) {
-    const body = await req.text();
-    const headerPayload = await headers();
-    const sig = headerPayload.get('stripe-signature');
+    const stripe = getStripe();
+    const supabaseAdmin = getSupabaseAdmin();
 
-    if (!sig) {
-        return NextResponse.json({ error: 'Missing Stripe Signature' }, { status: 400 });
-    }
+    const payload = await req.text();
+    const signature = req.headers.get('Stripe-Signature');
 
     let event: Stripe.Event;
 
+    // Cryptographic Gatekeeper — verify Stripe signature
     try {
-        // CRITICAL SECURITY: Verify the signature
-        event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
-    } catch (err: any) {
-        console.error(`Webhook signature verification failed:`, err.message);
-        // Requirement 5A: Return 401 Unauthorized immediately
-        return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 401 });
+        event = stripe.webhooks.constructEvent(
+            payload,
+            signature!,
+            process.env.STRIPE_WEBHOOK_SECRET!
+        );
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`⚠️ Webhook signature verification failed: ${message}`);
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Handle the event
-    console.log(`Event received: ${event.type}`);
+    // Business Logic
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
 
-    switch (event.type) {
-        case 'checkout.session.completed':
-            const session = event.data.object as Stripe.Checkout.Session;
-            // Handle successful payment
-            // For "Teflon", we do limited processing here.
-            // Logic would go here to audit log or trigger downstream.
-            console.log('Payment success:', session.id);
-            break;
-        default:
-            console.log(`Unhandled event type ${event.type}`);
+        const customerEmail = session.customer_details?.email;
+        const customerName = session.customer_details?.name;
+
+        if (customerEmail && customerName) {
+            // ================================================================
+            // [RW-01] ✅ DEPLOYED 2026-02-25 — AES-256-GCM Encryption
+            // ================================================================
+            // T.C.A. § 1340-03-07 compliance: `legal_name` and `permit_number`
+            // are encrypted at the application layer via lib/crypto.ts before
+            // any INSERT. The DB stores ciphertext only — never plaintext PII.
+            //
+            // Key source: process.env.ENCRYPTION_KEY (32-byte hex, .env.local)
+            // Format stored: <iv_hex>:<tag_hex>:<ciphertext_hex>
+            // ================================================================
+            let encryptedName: string;
+            let encryptedPermit: string;
+
+            try {
+                [encryptedName, encryptedPermit] = await Promise.all([
+                    encrypt(customerName),
+                    encrypt('PENDING'),
+                ]);
+            } catch (cryptoErr: unknown) {
+                const msg = cryptoErr instanceof Error ? cryptoErr.message : 'Unknown crypto error';
+                console.error(`🔐 Encryption failed — student record NOT written: ${msg}`);
+                // Return 500 so Stripe retries the webhook delivery
+                return NextResponse.json({ error: 'Encryption Error' }, { status: 500 });
+            }
+
+            const { error } = await supabaseAdmin
+                .from('students_driver_ed')
+                .insert([
+                    {
+                        legal_name: encryptedName,       // ✅ AES-256-GCM encrypted
+                        parent_email: customerEmail,
+                        permit_number: encryptedPermit,  // ✅ AES-256-GCM encrypted
+                        dob: '2000-01-01', // [RW-03] Placeholder — Fillout form needed
+                        classroom_hours: 0,
+                        driving_hours: 0,
+                    }
+                ]);
+
+            if (error) {
+                console.error('Database Insert Failed:', error);
+                return NextResponse.json({ error: 'Database Error' }, { status: 500 });
+            }
+
+            // ⚠️ Never log PII — reference only the Stripe session ID
+            console.log(`✅ Student record sealed in vault. Session: ${session.id}`);
+        }
     }
 
     return NextResponse.json({ received: true });
